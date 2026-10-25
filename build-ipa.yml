@@ -1,0 +1,55 @@
+name: Build unsigned iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract starter project
+        run: |
+          test -f Stranded_iOS_Starter.zip
+          mkdir -p _starter
+          unzip -q Stranded_iOS_Starter.zip -d _starter
+          test -f _starter/stranded_ios_port/project.yml
+          cp -R _starter/stranded_ios_port/. .
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build unsigned iOS app
+        run: |
+          xcodebuild \
+            -project StrandedIOS.xcodeproj \
+            -scheme StrandedIOS \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH="build/DerivedData/Build/Products/Release-iphoneos/Stranded.app"
+          test -d "$APP_PATH"
+          mkdir -p build/ipa/Payload
+          cp -R "$APP_PATH" build/ipa/Payload/
+          cd build/ipa
+          zip -qr "$GITHUB_WORKSPACE/Stranded-unsigned.ipa" Payload
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Stranded-unsigned-ipa
+          path: Stranded-unsigned.ipa
+          if-no-files-found: error
